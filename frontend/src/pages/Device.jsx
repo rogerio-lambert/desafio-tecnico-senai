@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
+
 const { io } = require("socket.io-client");
-const socket = io('http://localhost:3001');
+require('dotenv').config();
+
+const socketServerUrl = process.env.SOCKET_SERVER || 'http://localhost:3001';
+console.log(socketServerUrl)
+const socket = io(socketServerUrl);
 
 function Device(props) {
   const [controls, setControls] = useState({
@@ -17,9 +22,18 @@ function Device(props) {
 
   useEffect(() => {
     socket.emit('newDevice', { params, controls, offMode });
+  }, []);
+
+  useEffect(() => {
     socket.on('createId', ({ id }) => setDeviceId(id));
     socket.on('switchOnOff', ({ id, offMode: newPosition }) => {
       id === deviceId && switchOffMode(newPosition);
+    });
+    socket.on('controlDevice', ({ newControls, id }) => {
+      if (id === deviceId) {
+        setControls(newControls);
+        socket.emit('updateDashboard', { id: deviceId, params, controls })
+      }
     });
   }, [controls, deviceId, offMode, params]);
 
@@ -27,34 +41,33 @@ function Device(props) {
     <section>
       <h1>{ `Dispositivo id: ${deviceId}` }</h1> 
       {
-        Object.entries(params).map((parameter, index) => (
-          <fieldset htmlFor="" key={index}>
-            <legend>{parameter[0]}</legend>
-            <label htmlFor="value">value</label>
-            <input 
-              type="text"
-              name="value"
-              id=""
-              value={offMode ? '---' : parameter[1]}
-            />
-            <label htmlFor="control">control</label>
-            <input 
-              type="number"
-              name="control"
-              id=""
-              value={Object.values(controls)[index]}
-              disabled={offMode}
-              onChange={({ target }) => {
-                const controlName = Object.keys(controls)[index];
-                const paramName = parameter[0];
-                const controlValue = target.value;
-                setControls({ ...controls, [controlName]: controlValue });
-                setParameters({ ...params, [paramName]:  gain[index]*controlValue });
-                socket.emit('updateDashboard', { params, controls })
-              }}
-            />
-          </fieldset>
-        ))
+        Object.entries(controls).map((control, index) => {
+          const [paramName, paramValue] = Object.entries(params)[index]
+          const [controlName, controlValue]  =  control;
+          return (<fieldset htmlFor="" key={index}>
+              <legend>{paramName}</legend>
+              <label htmlFor="value">value</label>
+              <input 
+                type="text"
+                name="value"
+                id=""
+                value={offMode ? '---' : paramValue}
+              />
+              <label htmlFor="control">control</label>
+              <input 
+                type="number"
+                name="control"
+                id=""
+                value={Object.values(controls)[index]}
+                disabled={offMode}
+                onChange={({ target }) => {
+                  setParameters({ ...params, [paramName]:  gain[index] * controlValue });
+                  setControls({ ...controls, [controlName]: target.value });
+                  socket.emit('updateDashboard', { id: deviceId, params, controls })
+                }}
+              />
+            </fieldset>)
+        })
       }
       <label htmlFor="on-off">
         ligar/desligar       
